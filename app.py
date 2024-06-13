@@ -1,3 +1,4 @@
+import time
 import streamlit as st
 from snowflake.snowpark import Session
 from snowflake.snowpark.context import get_active_session
@@ -74,19 +75,19 @@ st.session_state.show_chart = False
 if st.button('Submit'):
     st.session_state.generated_code = None
     st.session_state.show_chart = False
+    st.session_state.edit_mode = False
     with st.spinner("Waiting for LLM to generate code..."):
-        df = get_or_create_session().table(f"{database}.{schema}.{table}")
-        llm_prompt = f"""
+        df = get_or_create_session().table(f"{database}.{schema}.{table}").to_pandas()
+        response = get_response_from_llm(f"""
         You are a Python developer that writes code using Plotly to visualize data.
-        Your data input is a global variable, pandas dataframe named df with the following columns: {', '.join([col.name for col in df.schema])}.
+        Your data input is a global variable, pandas dataframe named df with the following columns: {', '.join(df.columns)}.
         Do not attempt to read in, create, or utilize any additional data or methods.
         Generate Python code only to visualize the following query:
         {prompt}
         Ensure the code includes all necessary imports, data aggregation, and sorting steps.
         Be careful to re-index if grouping and then presenting a chart with an axis that matches the groupby col.
         Make sure the code can be executed as is to generate the requested plot.
-        """
-        response = get_response_from_llm(llm_prompt)
+        """)
         code = extract_python_code(response)
         
         if not code:
@@ -96,7 +97,7 @@ if st.button('Submit'):
             st.session_state.generated_code = code
             st.session_state.show_chart = True
 
-if st.session_state.show_chart:
+if st.session_state.show_chart or st.session_state.edit_mode:
     col1, col2 = st.columns([1, 2])
 
     with col1:
@@ -115,7 +116,7 @@ if st.session_state.show_chart:
         st.subheader('Chart:')
         with st.spinner("Plotting ..."):
             try:
-                exec_globals = {"st": st, "df": get_or_create_session().table(f"{database}.{schema}.{table}").to_pandas(), "px": px}
+                exec_globals = {"st": st, "df": df, "px": px}
                 exec(st.session_state.generated_code, exec_globals)
                 fig = exec_globals.get('fig')
                 if fig:
