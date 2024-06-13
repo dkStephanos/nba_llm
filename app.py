@@ -33,11 +33,20 @@ class SnowflakeCortexLLM(LLM):
         return llm_response
 
 def extract_python_code(text):
-    pattern = r"```python\s*(.*?)\s*```"
+    # Match content between triple backticks (```), optionally with "python" after the first backtick
+    pattern = r"```(?:python\s*)?(.*?)```"
     matches = re.findall(pattern, text, re.DOTALL)
+    
     if matches:
+        # Return the first matched code block
         return matches[0].strip()
-    return None
+    else:
+        # Handle the case where no complete code block is found
+        # Look for the last incomplete code block starting with ```
+        start_pattern = r"```(?:python\s*)?(.*)"
+        start_match = re.search(start_pattern, text, re.DOTALL)
+        if start_match:
+            return start_match.group(1).strip()
 
 def get_response_from_llm(prompt):
     llm = SnowflakeCortexLLM(sp_session=session)
@@ -46,10 +55,7 @@ def get_response_from_llm(prompt):
 # Ensure df exists
 database = "NBA"  
 schema = "PUBLIC"  
-table = "BOXSCORES"  
-
-# Fetch the data and create a pandas dataframe
-df = session.table(f"{database}.{schema}.{table}").to_pandas()
+table = "BOXSCORES"
 
 # Streamlit app
 st.set_page_config(page_title="Historic Boxscore Data Interface", page_icon="📊", layout="wide")
@@ -59,16 +65,20 @@ st.title("Historic Boxscore Data Interface 📊")
 prompt = st.text_area('Enter your query about historic boxscore data:')
 if st.button('Submit'):
     with st.spinner("Waiting for LLM to generate code..."):
+        # Fetch the data and create a pandas dataframe
+        df = session.table(f"{database}.{schema}.{table}").to_pandas()
         # Update the prompt to ask for Python code explicitly
         llm_prompt = f"""
         You are a Python developer that writes code using Plotly to visualize data.
         Your data input is a pandas dataframe named df with the following columns: {', '.join(df.columns)}.
         Generate Python code only to visualize the following query:
         {prompt}
-        Make sure the code performs any necessary aggregation and sorting, and can be executed as is to generate the requested plot.
+        Ensure the code includes all necessary imports, data aggregation, and sorting steps.
+        Make sure the code can be executed as is to generate the requested plot.
         """
         response = get_response_from_llm(llm_prompt)
-    
+        st.text(response)
+
         code = extract_python_code(response)
         
         if not code:
@@ -77,6 +87,7 @@ if st.button('Submit'):
         else:
             st.subheader('Generated Code:')
             st.code(code, language="python", line_numbers=True)
+
             
             st.subheader('Chart:')
             with st.spinner("Plotting ..."):
