@@ -13,7 +13,6 @@ def get_or_create_session():
         st.session_state.snowpark_session = get_active_session()
     return st.session_state.snowpark_session
 
-
 class SnowflakeCortexLLM(LLM):
     sp_session: Session
     model: str = 'mixtral-8x7b'
@@ -59,6 +58,7 @@ def get_response_from_llm(prompt):
 database = "NBA"
 schema = "PUBLIC"
 table = "BOXSCORES"
+df = None
 
 # Streamlit app
 st.set_page_config(page_title="Historic Boxscore Data Interface", page_icon="📊", layout="wide")
@@ -67,10 +67,13 @@ st.title("Historic Boxscore Data Interface 📊")
 # User input
 prompt = st.text_area('Enter your query about historic boxscore data:')
 
-# Session state for the generated code and edit mode
-st.session_state.generated_code = ''
-st.session_state.edit_mode = False
-st.session_state.show_chart = False
+# Initialize session state variables if they do not exist
+if 'generated_code' not in st.session_state:
+    st.session_state.generated_code = ''
+if 'edit_mode' not in st.session_state:
+    st.session_state.edit_mode = False
+if 'show_chart' not in st.session_state:
+    st.session_state.show_chart = False
 
 if st.button('Submit'):
     st.session_state.generated_code = None
@@ -97,7 +100,7 @@ if st.button('Submit'):
             st.session_state.generated_code = code
             st.session_state.show_chart = True
 
-if st.session_state.show_chart or st.session_state.edit_mode:
+if st.session_state.show_chart:
     col1, col2 = st.columns([1, 2])
 
     with col1:
@@ -111,11 +114,14 @@ if st.session_state.show_chart or st.session_state.edit_mode:
             st.code(st.session_state.generated_code, language="python")
             if st.button('Edit Code'):
                 st.session_state.edit_mode = True
+                st.session_state.show_chart = False
 
     with col2:
         st.subheader('Chart:')
         with st.spinner("Plotting ..."):
             try:
+                if df is None:
+                    df = get_or_create_session().table(f"{database}.{schema}.{table}").to_pandas()
                 exec_globals = {"st": st, "df": df, "px": px}
                 exec(st.session_state.generated_code, exec_globals)
                 fig = exec_globals.get('fig')
@@ -123,3 +129,13 @@ if st.session_state.show_chart or st.session_state.edit_mode:
                     st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error(f"An error occurred: {e}")
+                
+if st.session_state.edit_mode:
+    st.subheader('Generated Code:')
+    with st.container():
+        st.text_area('Edit the code if needed:', st.session_state.generated_code, height=300, key='code_editor')
+        if st.button('Save and Refresh Chart'):
+            st.session_state.generated_code = st.session_state.code_editor
+            st.session_state.edit_mode = False
+            st.session_state.show_chart = True
+            
