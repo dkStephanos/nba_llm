@@ -64,10 +64,7 @@ df = None
 st.set_page_config(page_title="Historic Boxscore Data Interface", page_icon="📊", layout="wide")
 st.title("Historic Boxscore Data Interface 📊")
 
-# User input
-prompt = st.text_area('Enter your query about historic boxscore data:')
-
-# Initialize session state variables if they do not exist
+# Initialize session state variables
 if 'generated_code' not in st.session_state:
     st.session_state.generated_code = ''
 if 'show_code' not in st.session_state:
@@ -76,17 +73,23 @@ if 'edit_mode' not in st.session_state:
     st.session_state.edit_mode = False
 if 'show_chart' not in st.session_state:
     st.session_state.show_chart = False
+if 'df' not in st.session_state:
+    st.session_state.df = None
 
-if st.button('Submit'):
+# User input
+prompt = st.text_area('Enter your query about historic boxscore data:')
+
+def generate_code():
     st.session_state.generated_code = None
     st.session_state.show_chart = False
     st.session_state.edit_mode = False
     with st.spinner("Waiting for LLM to generate code..."):
-        df = get_or_create_session().table(f"{database}.{schema}.{table}").to_pandas()
+        if st.session_state.df is None:
+            st.session_state.df = get_or_create_session().table(f"{database}.{schema}.{table}").to_pandas()
         response = get_response_from_llm(f"""
         You are a Python developer that writes code using Plotly to visualize data.
         Your data input is a global variable, pandas dataframe named df that is available to you.
-        The df has the following columnal structure: {', '.join([f"{col} ({dtype})" for col, dtype in df.dtypes.items()])}.
+        The df has the following columnal structure: {', '.join([f"{col} ({dtype})" for col, dtype in st.session_state.df.dtypes.items()])}.
         Do not attempt to read in, create, or utilize any additional data or methods (or the provided df).
         Do not make any assumptions when writing the code. 
         Generate Python code only to visualize the following query:
@@ -110,15 +113,16 @@ if st.button('Submit'):
         else:
             st.session_state.generated_code = code
             st.session_state.show_chart = True
-            
-    
+
+if st.button('Submit'):
+    generate_code()
+
+# Chart display logic
 if st.session_state.show_chart:
     st.subheader('Chart:')
     with st.spinner("Plotting ..."):
         try:
-            if df is None:
-                df = get_or_create_session().table(f"{database}.{schema}.{table}").to_pandas()
-            exec_globals = {"st": st, "df": df, "px": px}
+            exec_globals = {"st": st, "df": st.session_state.df, "px": px}
             exec(st.session_state.generated_code, exec_globals)
             fig = exec_globals.get('fig')
             if fig:
@@ -126,27 +130,23 @@ if st.session_state.show_chart:
         except Exception as e:
             st.error(f"An error occurred: {e}")
 
-        if st.session_state.show_code:
-            if st.button('Hide Code'):
-                st.session_state.show_code = False
-        else:
-            if st.button('Show Code'):
-                st.session_state.show_code = True
-        
+# Code display and editing logic
+if st.session_state.show_chart:
+    if st.button('Toggle Code View'):
+        st.session_state.show_code = not st.session_state.show_code
+
 if st.session_state.show_code:
     if st.session_state.edit_mode:
         st.subheader('Edit Code:')
-        st.text_area('Edit the code if needed:', st.session_state.generated_code, height=300, key='code_editor')
+        edited_code = st.text_area('Edit the code if needed:', st.session_state.generated_code, height=300, key='code_editor')
+        if st.button('Save and Refresh Chart'):
+            st.session_state.generated_code = edited_code
+            st.session_state.edit_mode = False
+            st.session_state.show_chart = True
+            st.experimental_rerun()
     else:
         st.subheader('Generated Code:')
         st.code(st.session_state.generated_code, language="python")
-    
-    if st.button('Edit Code'):
-        st.session_state.edit_mode = True
-
-if st.session_state.edit_mode:
-    with st.container():
-        if st.button('Save and Refresh Chart'):
-            st.session_state.generated_code = st.session_state.code_editor
-            st.session_state.edit_mode = False
-            
+        if st.button('Edit Code'):
+            st.session_state.edit_mode = True
+            st.experimental_rerun()
