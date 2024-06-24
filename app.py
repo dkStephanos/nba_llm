@@ -70,6 +70,8 @@ prompt = st.text_area('Enter your query about historic boxscore data:')
 # Initialize session state variables if they do not exist
 if 'generated_code' not in st.session_state:
     st.session_state.generated_code = ''
+if 'show_code' not in st.session_state:
+    st.session_state.show_code = False
 if 'edit_mode' not in st.session_state:
     st.session_state.edit_mode = False
 if 'show_chart' not in st.session_state:
@@ -83,13 +85,22 @@ if st.button('Submit'):
         df = get_or_create_session().table(f"{database}.{schema}.{table}").to_pandas()
         response = get_response_from_llm(f"""
         You are a Python developer that writes code using Plotly to visualize data.
-        Your data input is a global variable, pandas dataframe named df with the following columns: {', '.join(df.columns)}.
-        Do not attempt to read in, create, or utilize any additional data or methods.
+        Your data input is a global variable, pandas dataframe named df that is available to you.
+        The df has the following columnal structure: {', '.join([f"{col} ({dtype})" for col, dtype in df.dtypes.items()])}.
+        Do not attempt to read in, create, or utilize any additional data or methods (or the provided df).
+        Do not make any assumptions when writing the code. 
         Generate Python code only to visualize the following query:
         {prompt}
         Ensure the code includes all necessary imports, data aggregation, and sorting steps.
         Be careful to re-index if grouping and then presenting a chart with an axis that matches the groupby col.
         Make sure the code can be executed as is to generate the requested plot.
+
+        The data we are interacting with is a series of boxscore entries for players. each row represents a single player for a single game.
+        When asked for career stats, these need to be aggregatted across the entire data set (or specified year range) on a player or team basis (depending on context).
+        Do not use GAME_ID in any calculations, when getting per-game averages, you must use the rows count.
+
+        Here is some info about the cols:
+            MP = minutes played
         """)
         code = extract_python_code(response)
         
@@ -99,41 +110,36 @@ if st.button('Submit'):
         else:
             st.session_state.generated_code = code
             st.session_state.show_chart = True
-
+            
+    
 if st.session_state.show_chart:
-    col1, col2 = st.columns([1, 2])
-
-    with col1:
-        st.subheader('Generated Code:')
-        if st.session_state.edit_mode:
-            st.text_area('Edit the code if needed:', st.session_state.generated_code, height=300, key='code_editor')
-            if st.button('Save and Refresh Chart'):
-                st.session_state.generated_code = st.session_state.code_editor
-                st.session_state.edit_mode = False
-        else:
-            st.code(st.session_state.generated_code, language="python")
-            if st.button('Edit Code'):
-                st.session_state.edit_mode = True
-                st.session_state.show_chart = False
-
-    with col2:
-        st.subheader('Chart:')
-        with st.spinner("Plotting ..."):
-            try:
-                if df is None:
-                    df = get_or_create_session().table(f"{database}.{schema}.{table}").to_pandas()
-                exec_globals = {"st": st, "df": df, "px": px}
-                exec(st.session_state.generated_code, exec_globals)
-                fig = exec_globals.get('fig')
-                if fig:
-                    st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-                
-if st.session_state.edit_mode:
+    st.subheader('Chart:')
+    with st.spinner("Plotting ..."):
+        try:
+            if df is None:
+                df = get_or_create_session().table(f"{database}.{schema}.{table}").to_pandas()
+            exec_globals = {"st": st, "df": df, "px": px}
+            exec(st.session_state.generated_code, exec_globals)
+            fig = exec_globals.get('fig')
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+        if st.button('Show Code'):
+            st.session_state.show_code = True
+        
+if st.session_state.show_code:
     st.subheader('Generated Code:')
+    st.code(st.session_state.generated_code, language="python")
+    
+    if st.button('Edit Code'):
+        st.session_state.edit_mode = True
+        st.session_state.show_chart = False
+        st.session_state.show_code = False
+
+if st.session_state.edit_mode:
+    st.subheader('Edit Code:')
     with st.container():
-        st.text_area('Edit the code if needed:', st.session_state.generated_code, height=300, key='code_editor')
         if st.button('Save and Refresh Chart'):
             st.session_state.generated_code = st.session_state.code_editor
             st.session_state.edit_mode = False
