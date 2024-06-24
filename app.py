@@ -13,8 +13,6 @@ def get_or_create_session():
         st.session_state.snowpark_session = get_active_session()
     return st.session_state.snowpark_session
 
-
-
 class SnowflakeCortexLLM(LLM):
     sp_session: Session
     model: str = 'mixtral-8x7b'
@@ -121,6 +119,12 @@ def generate_code():
 if st.button('Submit'):
     generate_code()
 
+@st.cache_data
+def get_chart(code, df):
+    exec_globals = {"st": st, "df": df, "px": px}
+    exec(code, exec_globals)
+    return exec_globals.get('fig')
+
 # Chart display logic
 if st.session_state.show_chart:
     st.subheader('Chart:')
@@ -129,9 +133,7 @@ if st.session_state.show_chart:
     if st.session_state.updating_chart:
         with st.spinner("Updating chart..."):
             try:
-                exec_globals = {"st": st, "df": st.session_state.df, "px": px}
-                exec(st.session_state.generated_code, exec_globals)
-                fig = exec_globals.get('fig')
+                fig = get_chart(st.session_state.generated_code, st.session_state.df)
                 if fig:
                     time.sleep(0.5)  # Add a small delay to ensure the spinner is visible
                     chart_placeholder.plotly_chart(fig, use_container_width=True)
@@ -140,26 +142,26 @@ if st.session_state.show_chart:
             finally:
                 st.session_state.updating_chart = False
     else:
-        # If not updating, just display the existing chart
-        exec_globals = {"st": st, "df": st.session_state.df, "px": px}
-        exec(st.session_state.generated_code, exec_globals)
-        fig = exec_globals.get('fig')
+        fig = get_chart(st.session_state.generated_code, st.session_state.df)
         if fig:
             chart_placeholder.plotly_chart(fig, use_container_width=True)
 
 # Code display and editing logic
 if st.session_state.show_chart:
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        if st.button('Toggle Code View'):
-            st.session_state.show_code = not st.session_state.show_code
-            st.session_state.edit_mode = False  # Reset edit mode when toggling
+    if st.button('Toggle Code View'):
+        st.session_state.show_code = not st.session_state.show_code
+        st.session_state.edit_mode = False  # Reset edit mode when toggling
 
 if st.session_state.show_code:
-    if st.session_state.edit_mode:
-        st.subheader('Edit Code:')
-        edited_code = st.text_area('Edit the code if needed:', st.session_state.generated_code, height=300, key='code_editor')
-        col1, col2, col3 = st.columns([1, 1, 2])
+    st.subheader('Code:')
+    
+    if not st.session_state.edit_mode:
+        st.code(st.session_state.generated_code, language="python")
+        if st.button('Edit Code'):
+            st.session_state.edit_mode = True
+    else:
+        edited_code = st.text_area('Edit the code:', st.session_state.generated_code, height=300, key='code_editor')
+        col1, col2 = st.columns([1, 1])
         with col1:
             if st.button('Save and Update Chart'):
                 st.session_state.generated_code = edited_code
@@ -169,10 +171,3 @@ if st.session_state.show_code:
         with col2:
             if st.button('Cancel'):
                 st.session_state.edit_mode = False
-                st.experimental_rerun()
-    else:
-        st.subheader('Generated Code:')
-        st.code(st.session_state.generated_code, language="python")
-        if st.button('Edit Code'):
-            st.session_state.edit_mode = True
-
