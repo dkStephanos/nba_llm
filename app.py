@@ -125,23 +125,28 @@ if st.session_state.show_chart:
                 st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.error(f"An error occurred: {e}")
-        if st.button('Show Code'):
-            st.session_state.show_code = True
+
+        if st.session_state.show_code:
+            if st.button('Hide Code'):
+                st.session_state.show_code = False
+        else:
+            if st.button('Show Code'):
+                st.session_state.show_code = True
         
 if st.session_state.show_code:
-    st.subheader('Generated Code:')
-    st.code(st.session_state.generated_code, language="python")
+    if st.session_state.edit_mode:
+        st.subheader('Edit Code:')
+        st.text_area('Edit the code if needed:', st.session_state.generated_code, height=300, key='code_editor')
+    else:
+        st.subheader('Generated Code:')
+        st.code(st.session_state.generated_code, language="python")
     
     if st.button('Edit Code'):
         st.session_state.edit_mode = True
-        st.session_state.show_chart = False
-        st.session_state.show_code = False
 
 if st.session_state.edit_mode:
-    st.subheader('Edit Code:')
     with st.container():
         if st.button('Save and Refresh Chart'):
             st.session_state.generated_code = st.session_state.code_editor
             st.session_state.edit_mode = False
-            st.session_state.show_chart = True
             
