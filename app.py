@@ -76,6 +76,8 @@ if 'df' not in st.session_state:
     st.session_state.df = None
 if 'updating_chart' not in st.session_state:
     st.session_state.updating_chart = False
+if 'error_occurred' not in st.session_state:
+    st.session_state.error_occurred = False
 
 # User input
 prompt = st.text_area('Enter your query about historic boxscore data:')
@@ -103,6 +105,12 @@ def generate_code():
         The data we are interacting with is a series of boxscore entries for players. each row represents a single player for a single game.
         When asked for career stats, these need to be aggregatted across the entire data set (or specified year range) on a player or team basis (depending on context).
         Do not use GAME_ID in any calculations, when getting per-game averages, you must use the rows count.
+
+        When crafting your python code, make sure you are using keys that actually exist in the dataframe. For example, if I ask for data around a specific team, i.e. Lakers, you cannot just use that to filter the col. 
+        In this case, our team name takes the structure: Los Angeles Lakers, so you need to coerce any nl prompts to fit the underlying data in the df.
+
+        Unless specified via per minute, or historical, or totals, assume that any requested stat should be on a per-game basis. Per game stats should be calculated as an aggregation accross the rows DO NOT use MP to calculate per game avgs.
+        Be sure to inspect dtypes as well to avoid operations with bad operands like dividing a float by a str.
 
         Here is some info about the cols:
             MP = minutes played
@@ -137,22 +145,31 @@ if st.session_state.show_chart:
                 if fig:
                     time.sleep(0.5)  # Add a small delay to ensure the spinner is visible
                     chart_placeholder.plotly_chart(fig, use_container_width=True)
+                st.session_state.error_occurred = False
             except Exception as e:
-                st.error(f"An error occurred: {e}")
+                st.session_state.error_occurred = True
+                st.error(f"An error occurred: {str(e)}")
+                st.exception(e)
             finally:
                 st.session_state.updating_chart = False
     else:
-        fig = get_chart(st.session_state.generated_code, st.session_state.df)
-        if fig:
-            chart_placeholder.plotly_chart(fig, use_container_width=True)
+        try:
+            fig = get_chart(st.session_state.generated_code, st.session_state.df)
+            if fig:
+                chart_placeholder.plotly_chart(fig, use_container_width=True)
+            st.session_state.error_occurred = False
+        except Exception as e:
+            st.session_state.error_occurred = True
+            st.error(f"An error occurred: {str(e)}")
+            st.exception(e)
 
 # Code display and editing logic
-if st.session_state.show_chart:
+if st.session_state.show_chart or st.session_state.error_occurred:
     if st.button('Toggle Code View'):
         st.session_state.show_code = not st.session_state.show_code
         st.session_state.edit_mode = False  # Reset edit mode when toggling
 
-if st.session_state.show_code:
+if st.session_state.show_code or st.session_state.error_occurred:
     st.subheader('Code:')
     
     if not st.session_state.edit_mode:
