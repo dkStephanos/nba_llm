@@ -114,23 +114,33 @@ for i, message in enumerate(st.session_state.messages):
         st.markdown(message["content"])
         if "chart" in message:
             st.plotly_chart(message["chart"], use_container_width=True)
-        if "error" in message:
-            st.error(message["error"])
         if "code" in message:
-            if st.button("Show Code", key=f"show_code_{i}"):
-                st.code(message["code"], language="python")
+            edit_mode_key = f"edit_mode_{i}"
+            if edit_mode_key not in st.session_state:
+                st.session_state[edit_mode_key] = False
+            
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("Show Code", key=f"show_code_{i}"):
+                    st.code(message["code"], language="python")
+            with col2:
                 if st.button("Edit Code", key=f"edit_code_{i}"):
-                    edited_code = st.text_area("Edit the code:", message["code"], height=300, key=f"code_editor_{i}")
-                    if st.button("Update Chart", key=f"update_chart_{i}"):
-                        try:
-                            new_fig = get_chart(edited_code, st.session_state.df)
-                            if new_fig:
-                                st.plotly_chart(new_fig, use_container_width=True)
-                                st.session_state.messages.append({"role": "assistant", "content": "Here's the updated chart based on your edited code:", "code": edited_code, "chart": new_fig})
-                            else:
-                                st.warning("The edited code executed successfully, but no chart was generated.")
-                        except Exception as e:
-                            st.error(f"An error occurred: {str(e)}")
+                    st.session_state[edit_mode_key] = not st.session_state[edit_mode_key]
+            
+            if st.session_state[edit_mode_key]:
+                edited_code = st.text_area("Edit the code:", message["code"], height=300, key=f"code_editor_{i}")
+                if st.button("Update Chart", key=f"update_chart_{i}"):
+                    try:
+                        new_fig = get_chart(edited_code, st.session_state.df)
+                        if new_fig:
+                            st.plotly_chart(new_fig, use_container_width=True)
+                            st.session_state.messages.append({"role": "assistant", "content": "Here's the updated chart based on your edited code:", "code": edited_code, "chart": new_fig})
+                        else:
+                            st.warning("The edited code executed successfully, but no chart was generated.")
+                    except Exception as e:
+                        st.error(f"An error occurred: {str(e)}")
+                    st.session_state[edit_mode_key] = False
+                    st.experimental_rerun()
 
 # Chat input
 if prompt := st.chat_input("Ask about historic boxscore data"):
@@ -163,3 +173,9 @@ if st.button("Clear Chat History"):
     st.session_state.conversation_history = []
     st.experimental_rerun()
 
+st.markdown("""
+<script>
+    var body = window.parent.document.querySelector(".main");
+    body.scrollTop = body.scrollHeight;
+</script>
+""", unsafe_allow_html=True)
