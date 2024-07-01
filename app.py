@@ -115,18 +115,22 @@ for i, message in enumerate(st.session_state.messages):
         if "chart" in message:
             st.plotly_chart(message["chart"], use_container_width=True)
         if "code" in message:
+            show_code_key = f"show_code_{i}"
             edit_mode_key = f"edit_mode_{i}"
+            
+            if show_code_key not in st.session_state:
+                st.session_state[show_code_key] = False
             if edit_mode_key not in st.session_state:
                 st.session_state[edit_mode_key] = False
-            
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                if st.button("Show Code", key=f"show_code_{i}"):
-                    st.code(message["code"], language="python")
-            with col2:
-                if st.button("Edit Code", key=f"edit_code_{i}"):
-                    st.session_state[edit_mode_key] = not st.session_state[edit_mode_key]
-            
+
+            if st.button("Show Code", key=f"show_code_button_{i}"):
+                st.session_state[show_code_key] = not st.session_state[show_code_key]
+
+            if st.session_state[show_code_key]:
+                st.code(message["code"], language="python")
+                if st.button("Edit Code", key=f"edit_code_button_{i}"):
+                    st.session_state[edit_mode_key] = True
+
             if st.session_state[edit_mode_key]:
                 edited_code = st.text_area("Edit the code:", message["code"], height=300, key=f"code_editor_{i}")
                 if st.button("Update Chart", key=f"update_chart_{i}"):
@@ -141,6 +145,7 @@ for i, message in enumerate(st.session_state.messages):
                         st.error(f"An error occurred: {str(e)}")
                     st.session_state[edit_mode_key] = False
                     st.experimental_rerun()
+
 
 # Chat input
 if prompt := st.chat_input("Ask about historic boxscore data"):
