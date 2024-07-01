@@ -15,7 +15,7 @@ def get_or_create_session():
 
 class SnowflakeCortexLLM(LLM):
     sp_session: Session
-    model: str = 'mixtral-8x7b'
+    model: str = 'mistral-large'
     cortex_function: str = 'complete'
 
     @property
@@ -112,8 +112,12 @@ def generate_code():
         Unless specified via per minute, or historical, or totals, assume that any requested stat should be on a per-game basis. Per game stats should be calculated as an aggregation accross the rows DO NOT use MP to calculate per game avgs.
         Be sure to inspect dtypes as well to avoid operations with bad operands like dividing a float by a str.
 
-        Here is some info about the cols:
-            MP = minutes played
+        Here is a list of common mistakes you SHOULD avoid making.
+
+        1) # Calculate per game scoring average
+            nuggets_df["PTS_AVG"] = nuggets_df["PTS"] / nuggets_df["MP"] * 48
+
+            --> This makes no sense, minutes played has no impact on per game totals or averages
         """)
         code = extract_python_code(response)
         
